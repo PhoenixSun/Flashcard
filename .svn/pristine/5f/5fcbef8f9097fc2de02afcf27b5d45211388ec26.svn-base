@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">Flashcard</string>
+    <string name="greeting">Welcome to Flashcard!\n\nSign in with your Google account.</string>
+    <string name="sign_out">SIGN OUT</string>
+    <string name="user_info">Your account is: %s</string>
+    <string name="loading">Loading…</string>
+    <string name="delete_confirm">"Are you sure you want to delete this?"</string>
+</resources>

@@ -1,0 +1,254 @@
+package com.example.android.flashcard;
+
+import android.content.DialogInterface;
+import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.RectF;
+import android.os.Bundle;
+import android.support.design.widget.FloatingActionButton;
+import android.support.v7.app.AlertDialog;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
+import android.support.v7.widget.helper.ItemTouchHelper;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.EditText;
+
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.database.ChildEventListener;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+
+import java.util.ArrayList;
+
+public class FoldersActivity extends BaseActivity implements View.OnClickListener{
+
+    private ArrayList<String> folders =  new ArrayList<>();
+    private ArrayList<String> keys = new ArrayList<>();
+
+    private FirebaseDatabase mDatabase;
+    private DatabaseReference mDirectoryReference;
+    private DatabaseReference mFoldersReference;
+
+    private FolderAdapter folderAdapter;
+    private RecyclerView recyclerView;
+    private AlertDialog.Builder editDialog;
+    private AlertDialog.Builder signOutDialog;
+    private EditText folderEditText;
+
+    private int edit_position;
+    private View view;
+    private boolean wantToAdd = false;
+    private Paint paint = new Paint();
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_folders);
+
+        initViews();
+        initEditDialog();
+        initDatabase();
+    }
+
+    private void initViews(){
+        FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
+        fab.setOnClickListener(this);
+        recyclerView = (RecyclerView) findViewById(R.id.card_recycler_view);
+        recyclerView.setHasFixedSize(true);
+
+        recyclerView.setLayoutManager(new LinearLayoutManager(getApplicationContext()));
+        folderAdapter = new FolderAdapter(folders, keys);
+
+        recyclerView.setAdapter(folderAdapter);
+        folderAdapter.notifyDataSetChanged();
+        initSwipe();
+
+    }
+
+    private void initSwipe(){
+        ItemTouchHelper.SimpleCallback simpleItemTouchCallback =
+                new ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT | ItemTouchHelper.RIGHT) {
+
+            @Override
+            public boolean onMove(RecyclerView recyclerView, RecyclerView.ViewHolder viewHolder,
+                                  RecyclerView.ViewHolder target) {
+                return false;
+            }
+
+            @Override
+            public void onSwiped(RecyclerView.ViewHolder viewHolder, int direction) {
+                int position = viewHolder.getAdapterPosition();
+
+                if (direction == ItemTouchHelper.LEFT){
+                    // delete the folder if user swipes to the left
+                    String key = keys.get(position);
+                    mDirectoryReference.child(key).setValue(null);
+                    mFoldersReference.child(key).setValue(null);
+                } else {
+                    // edit the name of the folder if user swipes to the right
+                    removeView();
+                    edit_position = position;
+                    editDialog.setTitle("Edit Folder Name");
+                    folderEditText.setText(folders.get(position));
+                    editDialog.show();
+                }
+            }
+
+            @Override
+            public void onChildDraw(Canvas c, RecyclerView recyclerView, RecyclerView.ViewHolder viewHolder,
+                                    float dX, float dY, int actionState, boolean isCurrentlyActive) {
+
+                Bitmap icon;
+                if(actionState == ItemTouchHelper.ACTION_STATE_SWIPE){
+
+                    View itemView = viewHolder.itemView;
+                    float height = (float) itemView.getBottom() - (float) itemView.getTop();
+                    float width = height / 3;
+
+                    if(dX > 0) {  // right swipe will draw green background with an edit icon
+                        paint.setColor(Color.parseColor("#388E3C"));
+                        RectF background = new RectF((float) itemView.getLeft(), (float) itemView.getTop(),
+                                dX, (float) itemView.getBottom());
+                        c.drawRect(background, paint);
+                        icon = BitmapFactory.decodeResource(getResources(), R.drawable.ic_edit_white);
+                        RectF icon_dest = new RectF((float) itemView.getLeft() + width, (float) itemView.getTop() + width,
+                                (float) itemView.getLeft() + 2*width, (float)itemView.getBottom() - width);
+                        c.drawBitmap(icon, null, icon_dest, paint);
+                    }
+                    else if (dX < 0) {  // left swipe will draw red background with a delete icon
+                        paint.setColor(Color.parseColor("#D32F2F"));
+                        RectF background = new RectF((float) itemView.getRight() + dX, (float) itemView.getTop(),
+                                (float) itemView.getRight(), (float) itemView.getBottom());
+                        c.drawRect(background, paint);
+                        icon = BitmapFactory.decodeResource(getResources(), R.drawable.ic_delete_white);
+                        RectF icon_dest = new RectF((float) itemView.getRight() - 2*width, (float) itemView.getTop() + width,
+                                (float) itemView.getRight() - width,(float)itemView.getBottom() - width);
+                        c.drawBitmap(icon, null, icon_dest, paint);
+                    }
+                }
+                super.onChildDraw(c, recyclerView, viewHolder, dX, dY, actionState, isCurrentlyActive);
+            }
+        };
+        ItemTouchHelper itemTouchHelper = new ItemTouchHelper(simpleItemTouchCallback);
+        itemTouchHelper.attachToRecyclerView(recyclerView);
+    }
+
+    private void initDatabase() {
+        mDatabase = FirebaseDatabase.getInstance();
+        mDirectoryReference = mDatabase.getReference("directory");
+        mFoldersReference = mDatabase.getReference("card_lists");
+
+        mDirectoryReference.addChildEventListener(new ChildEventListener() {
+            @Override
+            public void onChildAdded(DataSnapshot dataSnapshot, String s) {
+                keys.add(dataSnapshot.getKey());
+                folders.add(dataSnapshot.getValue(String.class));
+                folderAdapter.notifyDataSetChanged();
+            }
+
+            @Override
+            public void onChildChanged(DataSnapshot dataSnapshot, String s) {
+                int index = keys.indexOf(dataSnapshot.getKey());
+                folders.set(index, dataSnapshot.getValue(String.class));
+                folderAdapter.notifyDataSetChanged();
+            }
+
+            @Override
+            public void onChildRemoved(DataSnapshot dataSnapshot) {
+                int index = keys.indexOf(dataSnapshot.getKey());
+                keys.remove(index);
+                folders.remove(index);
+                folderAdapter.notifyDataSetChanged();
+            }
+
+            @Override
+            public void onChildMoved(DataSnapshot dataSnapshot, String s) {
+
+            }
+
+            @Override
+            public void onCancelled(DatabaseError databaseError) {
+
+            }
+        });
+    }
+
+    private void removeView(){
+        if(view.getParent() != null) {
+            ((ViewGroup) view.getParent()).removeView(view);
+        }
+    }
+
+    private void initEditDialog(){
+        editDialog = new AlertDialog.Builder(this);
+        view = getLayoutInflater().inflate(R.layout.edit_dialog_layout, null);
+        editDialog.setView(view);
+        editDialog.setCancelable(false);
+        editDialog.setPositiveButton("Save", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                String input = folderEditText.getText().toString().trim();
+
+                // Don't communicate to the server if user enters nothing
+                if (input.equals("")) {
+                    folderAdapter.notifyDataSetChanged();
+                    return;
+                }
+                // Decide whether the user wants to add a folder or edit a folder name
+                if(wantToAdd) {
+                    wantToAdd = false;
+                    String key = mFoldersReference.push().getKey();
+                    mDirectoryReference.child(key).setValue(input);
+                    dialog.dismiss();
+                } else {
+                    String key = keys.get(edit_position);
+                    mDirectoryReference.child(key).setValue(input);
+                    folderAdapter.notifyDataSetChanged();
+                    dialog.dismiss();
+                }
+            }
+        });
+        editDialog.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                folderAdapter.notifyDataSetChanged();
+            }
+        });
+        folderEditText = (EditText)view.findViewById(R.id.folder_edit_text);
+    }
+
+    private void initSignOutDialog() {
+        signOutDialog = new AlertDialog.Builder(this);
+        signOutDialog.setMessage(R.string.uid_info);
+    }
+
+    @Override
+    public void onClick(View v) {
+        switch (v.getId()){
+            case R.id.fab:
+                removeView();
+                wantToAdd = true;
+                editDialog.setTitle("Add a new folder");
+                folderEditText.setText("");
+                editDialog.show();
+                break;
+
+            case R.id.user:
+                removeView();
+        }
+    }
+
+    public void updateUI(FirebaseUser user) {
+        if (user == null) {
+            Intent intent = new Intent(FoldersActivity.this, GoogleSignInActivity.class);
+            startActivity(intent);
+        }
+    }
+}

@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Flashcard</string>
+    <string name="greeting">Welcome to Flashcard!\n\nSign in with your Google account.</string>
+    <string name="sign_out">SIGN OUT</string>
+    <string name="uid_info">Your UID is: %s$1</string>
+    <string name="loading">Loading…</string>
+</resources>

@@ -1,0 +1,30 @@
+package com.example.android.flashcard;
+
+import android.support.v4.app.Fragment;
+import android.support.v4.app.FragmentManager;
+import android.support.v4.app.FragmentStatePagerAdapter;
+
+import java.util.ArrayList;
+
+/**
+ * Created by halcy on 4/22/2017.
+ */
+public class CardReviewPagerAdapter extends FragmentStatePagerAdapter {
+
+    private ArrayList<CardReviewFragment> fragments;
+
+    public CardReviewPagerAdapter(FragmentManager fm, ArrayList<CardReviewFragment> fragments) {
+        super(fm);
+        this.fragments = fragments;
+    }
+
+    @Override
+    public Fragment getItem(int position) {
+        return fragments.get(position);
+    }
+
+    @Override
+    public int getCount() {
+        return fragments.size();
+    }
+}
